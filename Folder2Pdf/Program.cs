@@ -8,39 +8,12 @@ namespace Folder2Pdf
 {
     class Program
     {
-        public static void ParseArgs(IEnumerable<String> Args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay)
-        {
-            Dictionary<String, String> ParsedArgs = new Dictionary<String, String>
-            {
-                { "Base", GetArgument(Args, "-Base") },
-                { "MangaName", GetArgument(Args, "-MangaName") },
-                { "MangaNameOG", GetArgument(Args, "-MangaNameOG") },
-                { "ProgressDisplay", GetArgument(Args, "-ProgressDisplay") }
-            };
-
-            if (!ParsedArgs.TryGetValue("Base", out Base)) Base = "C:\\Users\\Twister\\Downloads";
-            if (!ParsedArgs.TryGetValue("MangaName", out MangaName)) MangaName = "Noblesse";
-            if (!ParsedArgs.TryGetValue("MangaNameOG", out MangaNameOG)) MangaNameOG = "Manhwa";
-
-            ParsedArgs.TryGetValue("ProgressDisplay", out String ProgressDisplayIn);
-            switch (ProgressDisplayIn)
-            {
-                default:
-                case "Text":
-                    ProgressDisplay = ProgressDisplayType.Text;
-                    break;
-                case "Total":
-                    ProgressDisplay = ProgressDisplayType.Total;
-                    break;
-                case "Partial":
-                    ProgressDisplay = ProgressDisplayType.Partial;
-                    break;
-            }
-            ProgressDisplay = ToProgressDisplayType(ProgressDisplayIn);
-        }
-
         static void Main(string[] args)
         {
+            Int32 GetSubDirCount(String dir, out Int32 Count) => Count = Directory.EnumerateDirectories(dir).Count();
+            List<Int32> ToConvert = new List<Int32>();
+            Int32 SetNew(Int32 In, out Int32 Out) => Out = In;
+
             AppDomain.CurrentDomain.ProcessExit += new EventHandler((s, e) => Console.WriteLine("I'm out of here"));
 
             ParseArgs(args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay);
@@ -76,16 +49,38 @@ namespace Folder2Pdf
             Console.ReadKey();
         }
 
-        public static Int32 SetNew(Int32 In, out Int32 Out) => Out = In;
+        public static void ParseArgs(IEnumerable<String> Args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay)
+        {
+            String GetArgument(IEnumerable<string> args, string option) => args.SkipWhile(i => i.ToLower() != option.ToLower()).Skip(1).Take(1).FirstOrDefault();
 
-        public static String GetArgument(IEnumerable<string> args, string option) => args.SkipWhile(i => i.ToLower() != option.ToLower()).Skip(1).Take(1).FirstOrDefault();
-        public static Dictionary<String, String> ParsedArgs = new Dictionary<string, string>();
+            Dictionary<String, String> ParsedArgs = new Dictionary<String, String>
+            {
+                { "Base", GetArgument(Args, "-Base") },
+                { "MangaName", GetArgument(Args, "-MangaName") },
+                { "MangaNameOG", GetArgument(Args, "-MangaNameOG") },
+                { "ProgressDisplay", GetArgument(Args, "-ProgressDisplay") }
+            };
 
-        public static List<Int32> ToConvert = new List<Int32>();
+            if (!ParsedArgs.TryGetValue("Base", out Base)) Base = "C:\\Users\\Twister\\Downloads";
+            if (!ParsedArgs.TryGetValue("MangaName", out MangaName)) MangaName = "Noblesse";
+            if (!ParsedArgs.TryGetValue("MangaNameOG", out MangaNameOG)) MangaNameOG = "Manhwa";
 
-        public static IEnumerable<String> GetFilesFromDir(String dir) => Directory.EnumerateDirectories(dir);
-
-        public static Int32 GetSubDirCount(String dir, out Int32 Count) => Count = GetFilesFromDir(dir).Count();
+            ParsedArgs.TryGetValue("ProgressDisplay", out String ProgressDisplayIn);
+            switch (ProgressDisplayIn)
+            {
+                default:
+                case "Text":
+                    ProgressDisplay = ProgressDisplayType.Text;
+                    break;
+                case "Total":
+                    ProgressDisplay = ProgressDisplayType.Total;
+                    break;
+                case "Partial":
+                    ProgressDisplay = ProgressDisplayType.Partial;
+                    break;
+            }
+            ProgressDisplay = ToProgressDisplayType(ProgressDisplayIn);
+        }
 
         public static Double GetPercentage(Int32 Current, Int32 Maximum) => (Double)Current / Maximum;
 
@@ -93,26 +88,21 @@ namespace Folder2Pdf
 
         public static String PercentageString(PercentageType type, Int32 Current, Int32 Maximum)
         {
-            String output = "";
             switch (type)
             {
                 case PercentageType.Begin:
-                    output = $"Conversion has begun";
-                    break;
+                    return "Conversion has begun";
                 case PercentageType.Total:
-                    output = $"Chapter {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
-                    break;
+                    return $"Chapter {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
                 case PercentageType.Partial:
-                    output = $"Conversion task {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
-                    break;
+                    return $"Conversion task {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
                 case PercentageType.End:
-                    output = $"Successfully converted all chapters {GetPercentage(Current, Maximum):P}.";
-                    break;
+                    return $"Successfully converted all chapters {GetPercentage(Current, Maximum):P}.";
                 case PercentageType.None:
-                    output = $"No chapters need converting.";
-                    break;
+                    return "No chapters need converting.";
+                default:
+                    return "Why the fuck do I need profanity in my code Eli?";
             }
-            return output;
         }
 
         public enum ProgressDisplayType { Text, Total, Partial };
