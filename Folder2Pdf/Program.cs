@@ -8,48 +8,35 @@ namespace Folder2Pdf
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main(String[] Args)
         {
-            Int32 GetSubDirCount(String dir, out Int32 Count) => Count = Directory.EnumerateDirectories(dir).Count();
-            List<Int32> ToConvert = new List<Int32>();
-            Int32 SetNew(Int32 In, out Int32 Out) => Out = In;
+            ParseArgs(Args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay, out ProcessPriorityClass SpawnedPriority);
+            Int32 ChapterCount = Directory.EnumerateDirectories($"{Base}\\{MangaName}\\Chapters").Count();
+            
+            List<ConversionTask> Tasks = new List<ConversionTask>();
+            for (Int32 i = 1; i <= ChapterCount; i++)
+                if (!File.Exists($"{Base}\\{MangaName}\\Converted\\{MangaName} ({MangaNameOG}) {i.ToString("D3")}.pdf"))
+                    Tasks.Add(new ConversionTask(Tasks.Count, i.ToString("D3")));
 
-            AppDomain.CurrentDomain.ProcessExit += new EventHandler((s, e) => Console.WriteLine("I'm out of here"));
-
-            ParseArgs(args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay);
-
-            GetSubDirCount($"{Base}\\{MangaName}", out Int32 ChapterCount);
-            SetNew(ChapterCount - 1, out Int32 ChapterCount_);
-
-            for (Int32 i = 1; i < ChapterCount; i++)
-                if (!File.Exists($"{Base}\\{MangaName}\\pdf\\{MangaName} ({MangaNameOG}) {i.ToString("D3")}.pdf"))
-                    ToConvert.Add(i);
-
-            if (ToConvert.Count > 0)
+            if (Tasks.Count > 0)
             {
-                Console.WriteLine($"{PercentageString(PercentageType.Begin, ChapterCount, ChapterCount)}, {ToConvert.Count} to convert.");
+                Console.WriteLine($"{PercentageString(PercentageType.Begin, ChapterCount, ChapterCount)}, {Tasks.Count} to convert.");
 
                 ProgressBar progress = new ProgressBar();
                 progress.Dispose(ProgressDisplay == ProgressDisplayType.Text);
 
-                for (Int32 chapter = 0; chapter < ToConvert.Count; chapter++)
-                {
-                    String Chapter = ToConvert[chapter].ToString("D3");
-                    String Images = $"{Base}\\{MangaName}\\{Chapter}\\*";
-                    String Pdf = $"{Base}\\{MangaName}\\pdf\\{MangaName} ({MangaNameOG}) {Chapter}.pdf";
-                    Boolean exists = File.Exists(Pdf);
-
-                    process($"Tools\\ImageMagick\\magick", $"convert -adjoin \"{Images}\" \"{Pdf}\"");
-                    DoProgress(ProgressDisplay, progress, Chapter, ChapterCount_, chapter, ChapterCount);
-                };
+                Tasks.ForEach(Task => {
+                    StartProcess($"Tools\\ImageMagick\\magick", $"convert -adjoin \"{Base}\\{MangaName}\\Chapters\\{Task.Chapter}\\*\" \"{Base}\\{MangaName}\\Converted\\{MangaName} ({MangaNameOG}) {Task.Chapter}.pdf\"", SpawnedPriority);
+                    DoProgress(ProgressDisplay, progress, ChapterCount, Task.Chapter, Tasks.Count, Task.Position);
+                });
                 progress.Dispose(ProgressDisplay != ProgressDisplayType.Text);
             }
 
-            Console.WriteLine(PercentageString((ToConvert.Count < 1 ? PercentageType.None : PercentageType.End), ChapterCount, ChapterCount));
+            Console.WriteLine(PercentageString((Tasks.Count < 1 ? PercentageType.None : PercentageType.End), ChapterCount, ChapterCount));
             Console.ReadKey();
         }
 
-        public static void ParseArgs(IEnumerable<String> Args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay)
+        public static void ParseArgs(IEnumerable<String> Args, out String Base, out String MangaName, out String MangaNameOG, out ProgressDisplayType ProgressDisplay, out ProcessPriorityClass SpawnedPriority)
         {
             String GetArgument(IEnumerable<string> args, string option) => args.SkipWhile(i => i.ToLower() != option.ToLower()).Skip(1).Take(1).FirstOrDefault();
 
@@ -58,33 +45,58 @@ namespace Folder2Pdf
                 { "Base", GetArgument(Args, "-Base") },
                 { "MangaName", GetArgument(Args, "-MangaName") },
                 { "MangaNameOG", GetArgument(Args, "-MangaNameOG") },
-                { "ProgressDisplay", GetArgument(Args, "-ProgressDisplay") }
+
+                { "ProgressDisplay", GetArgument(Args, "-ProgressDisplay") },
+
+                { "SpawnedPriority", GetArgument(Args, "-SpawnedPriority") }
             };
 
             if (!ParsedArgs.TryGetValue("Base", out Base)) Base = "C:\\Users\\Twister\\Downloads";
             if (!ParsedArgs.TryGetValue("MangaName", out MangaName)) MangaName = "Noblesse";
             if (!ParsedArgs.TryGetValue("MangaNameOG", out MangaNameOG)) MangaNameOG = "Manhwa";
 
-            ParsedArgs.TryGetValue("ProgressDisplay", out String ProgressDisplayIn);
+            ProgressDisplay = ProgressDisplayType.Text;
+            if (ParsedArgs.TryGetValue("ProgressDisplay", out String ProgressDisplayIn)) ProgressDisplay = ParseProgressDisplay(ProgressDisplayIn);
+
+            SpawnedPriority = ProcessPriorityClass.Normal;
+            if (ParsedArgs.TryGetValue("SpawnedPriority", out String SpawnedPriorityIn)) SpawnedPriority = ParseSpawnedPriority(SpawnedPriorityIn);
+        }
+
+        public static ProgressDisplayType ParseProgressDisplay(String ProgressDisplayIn)
+        {
             switch (ProgressDisplayIn)
             {
                 default:
                 case "Text":
-                    ProgressDisplay = ProgressDisplayType.Text;
-                    break;
+                    return ProgressDisplayType.Text;
                 case "Total":
-                    ProgressDisplay = ProgressDisplayType.Total;
-                    break;
+                    return ProgressDisplayType.Total;
                 case "Partial":
-                    ProgressDisplay = ProgressDisplayType.Partial;
-                    break;
+                    return ProgressDisplayType.Partial;
             }
-            ProgressDisplay = ToProgressDisplayType(ProgressDisplayIn);
+        }
+
+        public static ProcessPriorityClass ParseSpawnedPriority(String SpawnedPriorityIn)
+        {
+            switch (SpawnedPriorityIn)
+            {
+                default:
+                case "Normal":
+                    return ProcessPriorityClass.Normal;
+                case "Idle":
+                    return ProcessPriorityClass.Idle;
+                case "High":
+                    return ProcessPriorityClass.High;
+                case "RealTime":
+                    return ProcessPriorityClass.RealTime;
+                case "BelowNormal":
+                    return ProcessPriorityClass.BelowNormal;
+                case "AboveNormal":
+                    return ProcessPriorityClass.AboveNormal;
+            }
         }
 
         public static Double GetPercentage(Int32 Current, Int32 Maximum) => (Double)Current / Maximum;
-
-        public enum PercentageType { Begin, End, Total, Partial, None };
 
         public static String PercentageString(PercentageType type, Int32 Current, Int32 Maximum)
         {
@@ -95,7 +107,7 @@ namespace Folder2Pdf
                 case PercentageType.Total:
                     return $"Chapter {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
                 case PercentageType.Partial:
-                    return $"Conversion task {Current.ToString("D3")}: {GetPercentage(Current, Maximum):P}";
+                    return $"Task {Current.ToString("D2")}: {GetPercentage(Current, Maximum):P}";
                 case PercentageType.End:
                     return $"Successfully converted all chapters {GetPercentage(Current, Maximum):P}.";
                 case PercentageType.None:
@@ -105,39 +117,39 @@ namespace Folder2Pdf
             }
         }
 
-        public enum ProgressDisplayType { Text, Total, Partial };
-
-        public static ProgressDisplayType ToProgressDisplayType(String progressDisplayIn)
-        {
-            switch (progressDisplayIn)
-            {
-                case "Total":
-                    return ProgressDisplayType.Total;
-                case "Partial":
-                    return ProgressDisplayType.Partial;
-                case "Text":
-                default:
-                    return ProgressDisplayType.Text;
-            }
-        }
-
-        public static void DoProgress(ProgressDisplayType ProgressDisplay, ProgressBar progress, String Chapter, Int32 ChapterCount_, Int32 chapter, Int32 ChapterCount)
+        public static void DoProgress(ProgressDisplayType ProgressDisplay, ProgressBar progress, Int32 ChapterCount, String Chapter, Int32 TaskCount, Int32 TaskPosition)
         {
             switch (ProgressDisplay)
             {
                 case ProgressDisplayType.Text:
-                    Console.WriteLine($"{PercentageString(PercentageType.Total, Int32.Parse(Chapter), ChapterCount_)}, {PercentageString(PercentageType.Partial, chapter, ChapterCount)}");
+                    Console.WriteLine($"{PercentageString(PercentageType.Total, Int32.Parse(Chapter), ChapterCount)}, {PercentageString(PercentageType.Partial, TaskPosition, TaskCount)}");
                     break;
                 case ProgressDisplayType.Total:
-                    progress.Report(GetPercentage(Int32.Parse(Chapter), ChapterCount_));
+                    progress.Report(GetPercentage(Int32.Parse(Chapter), ChapterCount));
                     break;
                 case ProgressDisplayType.Partial:
-                    progress.Report(GetPercentage(chapter, ChapterCount));
+                    progress.Report(GetPercentage(TaskPosition, TaskCount));
                     break;
             }
         }
 
-        public static String process(String FileName, String Arguments)
+        public enum PercentageType { Begin, End, Total, Partial, None };
+
+        public enum ProgressDisplayType { Text, Total, Partial };
+
+        public struct ConversionTask
+        {
+            public Int32 Position;
+            public String Chapter;
+
+            public ConversionTask(Int32 position, String chapter)
+            {
+                Position = position;
+                Chapter = chapter;
+            }
+        }
+
+        public static String StartProcess(String FileName, String Arguments, ProcessPriorityClass Priority)
         {
             Process p = new Process();
             p.StartInfo.CreateNoWindow = false;
@@ -147,6 +159,7 @@ namespace Folder2Pdf
             p.StartInfo.FileName = FileName;
             p.StartInfo.Arguments = Arguments;
             p.Start();
+            p.PriorityClass = Priority;
 
             String output = p.StandardOutput.ReadToEnd();
             p.WaitForExit();
